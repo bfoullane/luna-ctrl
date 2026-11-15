@@ -327,51 +327,13 @@ def resolve_end_of_day(state, actions, event_records):
     elif state["day"] > 5:
         state["over"], state["won"] = True, True
     return rep
-
-
 def play_day(state, actions, choices):
-    cfg = DIFFICULTY[state["level"]]
-    rep, afters, day = [], [], state["day"]
-    sun = round(cfg["sun"] * state["panel"] / 100)
-    fx(state, {"power": sun})
-    if sun:
-        rep.append(f"Sunshine: your panels made {sun} power this morning."
-                   + (" Damaged panels make less." if state["panel"] < 100 else ""))
-    for a in actions:
-        e = dict(ACTIONS[a]["fx"])
-        if a == "solar":
-            e["power"] = round(e["power"] * state["panel"] / 100)
-        fx(state, e)
+    """Shortcut for tests: runs one day with the SAME rules as the real game screen."""
+    rep = [resolve_morning(state)[1]]
+    records = []
     for ev_id, ch in zip(state["today"], choices):
-        opt = EVENTS[ev_id]["options"][ch]
-        fx(state, opt.get("now", {}))
-        rep.append(f"{EVENTS[ev_id]['title']}: {opt['note']}")
-        if ev_id == "air" and ch == "repair" and state["panel"] < 70:
-            fx(state, {"power": -10})
-            rep.append("Your damaged panels made the repair cost extra power.")
-        if "risk" in opt and state["rng"].random() < opt["risk"][0]:
-            fx(state, opt["risk"][1])
-            rep.append("Unlucky: dust damaged your panels. They make less power now.")
-        afters.append(opt.get("after", {}))
-    fx(state, {k: round(v * cfg["drain"]) for k, v in DRAIN.items()})
-    if day >= 3:
-        fx(state, {"food": -5})
-    d = DAYS[day - 1]
-    strength = round(d["strength"] * cfg["storm"])
-    if state["shield"] < strength:
-        hit = strength - state["shield"]
-        fx(state, {"power": -(hit // 2)})
-        if day >= 3:
-            fx(state, {"food": -(hit // 4)})
-        rep.append(f"Storm hit! Real flare {d['max_class']}. Weak shield cost {hit // 2} power.")
-    else:
-        rep.append(f"Storm blocked. Real flare {d['max_class']}. The shield held.")
-    for a in afters:
-        fx(state, a)
-    state["history"].append((day, actions, choices))
-    state["day"] += 1
-    if min(state["power"], state["oxygen"], state["food"]) <= 0 and day >= 3 or min(state["power"], state["oxygen"]) <= 0:
-        state["over"] = True
-    elif state["day"] > 5:
-        state["over"], state["won"] = True, True
-    return rep
+        rec = resolve_event(state, ev_id, ch)
+        rep.append(f"{EVENTS[ev_id]['title']}: {rec['note']}")
+        rep += rec["extra"]
+        records.append(rec)
+    return rep + resolve_end_of_day(state, actions, records)

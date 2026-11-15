@@ -1,107 +1,61 @@
+"""Daily gameplay screens for LUNA-CTRL (logic only; art lives in art.py, CSS in styles.py)."""
 import math
 import random
 import time
-import streamlit as st
-from engine import (
-    ACTIONS, DIFFICULTY, EVENTS, UNLOCK, DAYS, DAY_FACTS,
-    available, start_day, resolve_morning, resolve_event, resolve_end_of_day, new_game,
-)
-from events import rank as rank_key
-import streamlit as st
-from engine import (
-    ACTIONS, DIFFICULTY, EVENTS, UNLOCK, DAYS, DAY_FACTS,
-    available, start_day, resolve_morning, resolve_event, resolve_end_of_day,
-)
-from sound_fx import play_sound_engine
+from datetime import date
 
+import streamlit as st
+
+from art import EVENT_ART, itiri
+from engine import (ACTIONS, DAYS, DAY_FACTS, DIFFICULTY, EVENTS, UNLOCK,
+                    available, new_game, resolve_end_of_day, resolve_event,
+                    resolve_morning, start_day)
+from events import rank as rank_key
+from sound_fx import play_sound_engine
+from styles import CSS, ENDING_CSS
+
+# =====================================================================
+# CONSTANTS
+# =====================================================================
 NAMES = {"power": ("⚡", "Power"), "oxygen": ("💨", "Air"), "shield": ("🛡️", "Shield"),
          "food": ("🌱", "Food"), "science": ("⭐", "Science"), "panel": ("🔆", "Panels")}
 FACTOR = {"power": "power", "oxygen": "life", "shield": "shield", "food": "food"}
+RESOURCES = ("power", "oxygen", "shield", "food")
 
-CSS = """<style>
-/* Hide the invisible audio component iframe inside .st-key-page */
-.st-key-page iframe {
-  height: 0 !important;
-  min-height: 0 !important;
-  aspect-ratio: auto !important;
-  position: absolute !important;
-  pointer-events: none !important;
-  opacity: 0 !important;
-}
-@keyframes cardPullUp {
-  0% { opacity: 0; transform: translateY(28px) scale(0.97); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes floatSlow {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-7px); }
-}
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.35); }
-  50% { box-shadow: 0 0 22px 4px rgba(255, 201, 60, 0.55); }
-}
-.lc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;font-weight:700;font-size:1.2rem;margin-bottom:.6rem}
-.lc-dots{display:flex;gap:8px}.lc-dots i{width:16px;height:16px;border-radius:50%;background:#3C3489;border:2px solid #7fe7ff;display:inline-block}
-.lc-dots i.done{background:#7fe7ff}.lc-dots i.now{background:#ffc93c;border-color:#ffc93c;transform:scale(1.25)}
-.lc-lvl{background:#7fe7ff;color:#26215C;border-radius:999px;padding:4px 16px;font-size:.95rem}
-.lc-m{margin-bottom:.35rem}.lc-mh{display:flex;justify-content:space-between;color:#fff;font-weight:700;font-size:1rem}
-.lc-bar{height:14px;background:#3C3489;border-radius:999px;overflow:hidden}.lc-bar i{display:block;height:100%;border-radius:999px;transition:width .5s}
-.lc-low{color:#ffb347;font-size:.8rem;font-weight:700;min-height:1rem}
-.lc-sci{color:#ffd966;font-weight:800;font-size:1.05rem;text-align:right}
-.lc-stage{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#3C3489;border:2px solid #7F77DD;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
-.lc-badge{display:inline-block;background:#ffc93c;color:#1b1340;font-weight:800;font-size:.85rem;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.6rem}
-.lc-step-pills{float:right;font-size:.85rem;color:#CECBF6;font-weight:700}
-.lc-title{font-size:1.65rem;font-weight:800;color:#fff;margin:.2rem 0 .5rem}
-.lc-sub{font-size:1.15rem;color:#EEEDFE;line-height:1.5;margin-bottom:.9rem}
-.lc-art{background:#191442;border:1px solid #534ab7;border-radius:18px;padding:10px;text-align:center;margin-bottom:.8rem}
-.lc-art svg{width:100%;max-height:185px;display:block;margin:0 auto}
-.lc-choice-card{animation:cardPullUp .5s cubic-bezier(.22,1,.36,1) both;background:#26215C;border:2px solid #7fe7ff;border-radius:18px;padding:14px 16px;margin-bottom:.5rem;min-height:108px}
-.lc-choice-card b{color:#fff;font-size:1.12rem;display:block;margin-bottom:6px}
-.lc-chip{display:inline-block;border-radius:999px;padding:4px 12px;margin:3px 5px 3px 0;font-size:.9rem;font-weight:700}
-.lc-chip.up{background:#1d6b3f;color:#d6ffe6}.lc-chip.dn{background:#7a2b3a;color:#ffe0e0}.lc-chip.wait{background:#5a4d19;color:#ffe999}
-.lc-timer-wrap{background:#191442;border:1px solid #534ab7;border-radius:14px;padding:8px 14px;margin-bottom:.9rem}
-.lc-timer-top{display:flex;justify-content:space-between;color:#EEEDFE;font-weight:700;font-size:.95rem;margin-bottom:5px}
-.lc-timer-bar{height:10px;background:#3C3489;border-radius:999px;overflow:hidden}
-.lc-timer-bar i{display:block;height:100%;border-radius:999px;transition:width .35s linear}
-.lc-box-res{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#1d1849;border:2px solid #4cd97b;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
-.lc-box-res.warn{border-color:#ff9a9a}
-.lc-box-why{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#221c57;border:2px solid #7fe7ff;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#EEEDFE}
-.lc-box-dyk{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#342669;border:2px dashed #ffc93c;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
-.lc-tip{display:flex;align-items:center;gap:16px;margin-top:1rem;background:rgba(255,255,255,0.06);border-radius:18px;padding:12px 16px}
-.lc-tip svg{width:82px;flex:none;overflow:visible;animation:floatSlow 3s ease-in-out infinite}
-.lc-say{background:#fff;color:#26215C;border-radius:18px;padding:12px 16px;font-weight:700;font-size:1.05rem;line-height:1.4}
-button[data-testid="stBaseButton-primary"]{background:#FFC93C!important;color:#1b1340!important;box-shadow:0 4px 0 #d9961b;animation:pulseGlow 2.5s infinite}
-div.stButton>button{min-height:3.1rem;font-size:1.05rem}
-</style>"""
+LEVEL_ORDER = ["junior", "commander", "expert"]
+STAR2_SCIENCE = 30          # 2nd star: at least this much science
+STAR3_SCIENCE = 40          # 3rd star: this much science ...
+STAR3_MIN_RESOURCE = 15     # ... AND power, air and food all at least this high at the end
 
-FACES = {
- "happy": '<ellipse cx="50" cy="52" rx="5" ry="7" fill="#7fe7ff"/><ellipse cx="70" cy="52" rx="5" ry="7" fill="#7fe7ff"/><path d="M52 64q8 7 16 0" stroke="#7fe7ff" stroke-width="3" fill="none" stroke-linecap="round"/>',
- "worry": '<circle cx="50" cy="52" r="6.5" fill="#ffb347"/><circle cx="70" cy="52" r="6.5" fill="#ffb347"/><circle cx="50" cy="53" r="2.4" fill="#1e2a78"/><circle cx="70" cy="53" r="2.4" fill="#1e2a78"/><path d="M52 67q4-4 8 0q4 4 8 0" stroke="#ffb347" stroke-width="3" fill="none" stroke-linecap="round"/>',
- "joy": '<path d="M50 44l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6-5-2.8-5 2.8 1.2-5.6-4.2-3.8 5.6-.6z" fill="#ffd966"/><path transform="translate(20 0)" d="M50 44l2.4 5.2 5.6.6-4.2 3.8 1.2 5.6-5-2.8-5 2.8 1.2-5.6-4.2-3.8 5.6-.6z" fill="#ffd966"/><path d="M49 62q11 13 22 0z" fill="#7fe7ff"/>',
+RANKS = {
+    1: ("Moon Cadet", "You kept your crew alive through a real solar superstorm!"),
+    2: ("Lunar Commander", "A safe base AND great science. Mission Control is impressed!"),
+    3: ("Solar Storm Hero", "A near-perfect mission. Mission Control is cheering!"),
+}
+
+LOSS_TIPS = {
+    "oxygen": ("💨", "The air ran out",
+               "The oxygen machine uses power, but a crew cannot live without air. "
+               "Next time, pick “Make oxygen” before the air bar gets low."),
+    "power": ("⚡", "The power ran out",
+              "Everything on the base runs on power. Keep an eye on the power bar, "
+              "and remember that the shield and the oxygen machine both use it."),
+    "food": ("🌱", "The food ran out",
+             "From Day 3 your crew gets hungry every day. Pick “Tend the garden” "
+             "before the food bar gets low."),
 }
 
 
-def itiri(mood="happy"):
-    return ('<svg viewBox="0 0 120 150" aria-label="Itiri"><path d="M60 26v-12" stroke="#fff" stroke-width="3"/>'
-            '<circle cx="60" cy="9" r="6" fill="#ffc93c"/><rect x="40" y="118" width="14" height="24" rx="7" fill="#fff"/>'
-            '<rect x="66" y="118" width="14" height="24" rx="7" fill="#fff"/><rect x="32" y="80" width="56" height="46" rx="22" fill="#ff8a3d"/>'
-            '<rect x="84" y="88" width="12" height="30" rx="6" fill="#fff"/><rect x="24" y="88" width="12" height="30" rx="6" fill="#fff"/>'
-            '<circle cx="60" cy="102" r="7" fill="#ffc93c"/><circle cx="60" cy="52" r="38" fill="#fff"/>'
-            '<ellipse cx="60" cy="54" rx="29" ry="25" fill="#1e2a78"/>' + FACES[mood] + '</svg>')
-
-
-EVENT_ART = {
- "dust": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><ellipse cx="210" cy="155" rx="230" ry="35" fill="#5e5a80"/><g transform="translate(120,65) skewX(-18)"><rect width="140" height="52" rx="6" fill="#2c6bed" stroke="#7fe7ff" stroke-width="3"/><line x1="46" y1="0" x2="46" y2="52" stroke="#7fe7ff" stroke-width="2"/><line x1="93" y1="0" x2="93" y2="52" stroke="#7fe7ff" stroke-width="2"/><line x1="0" y1="26" x2="140" y2="26" stroke="#7fe7ff" stroke-width="2"/></g><circle cx="70" cy="65" r="22" fill="#9c96bd" opacity=".45"><animate attributeName="cx" values="40;370" dur="3.5s" repeatCount="indefinite"/></circle><circle cx="140" cy="95" r="28" fill="#b8b2d8" opacity=".35"><animate attributeName="cx" values="10;390" dur="2.8s" repeatCount="indefinite"/></circle></svg>',
- "night": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#0c0a24"/><circle cx="75" cy="35" r="3" fill="#fff"/><circle cx="150" cy="24" r="2" fill="#7fe7ff"/><circle cx="330" cy="40" r="3" fill="#ffd966"/><circle cx="370" cy="22" r="2" fill="#fff"/><path d="M295 28a26 26 0 1 0 24 36 21 21 0 1 1-24-36z" fill="#ffc93c"/><rect x="165" y="55" width="90" height="52" rx="10" fill="none" stroke="#7fe7ff" stroke-width="4"/><rect x="255" y="71" width="10" height="20" rx="3" fill="#7fe7ff"/><rect x="173" y="63" width="48" height="36" rx="5" fill="#ffc93c"><animate attributeName="width" values="65;25;65" dur="3s" repeatCount="indefinite"/></rect></svg>',
- "air": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><rect x="145" y="32" width="130" height="96" rx="18" fill="#2e276b" stroke="#7fe7ff" stroke-width="3"/><circle cx="210" cy="80" r="28" fill="#191442" stroke="#ffb347" stroke-width="4"/><path d="M210 58v44M188 80h44" stroke="#7fe7ff" stroke-width="5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 210 80" to="360 210 80" dur="4s" repeatCount="indefinite"/></path><circle cx="305" cy="95" r="8" fill="#7fe7ff" opacity=".7"><animate attributeName="cy" values="110;35" dur="2.2s" repeatCount="indefinite"/></circle><circle cx="325" cy="70" r="6" fill="#7fe7ff" opacity=".5"><animate attributeName="cy" values="105;30" dur="2.7s" repeatCount="indefinite"/></circle></svg>',
- "co2": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><rect x="130" y="30" width="160" height="100" rx="16" fill="#2b2363" stroke="#ff9a9a" stroke-width="3"/><line x1="150" y1="55" x2="270" y2="55" stroke="#ff9a9a" stroke-width="6" stroke-linecap="round"/><line x1="150" y1="80" x2="270" y2="80" stroke="#ffb347" stroke-width="6" stroke-linecap="round"/><line x1="150" y1="105" x2="270" y2="105" stroke="#ff9a9a" stroke-width="6" stroke-linecap="round"/><text x="85" y="75" fill="#ffb347" font-size="18" font-weight="bold">CO₂</text><text x="305" y="100" fill="#ff9a9a" font-size="18" font-weight="bold">CO₂</text></svg>',
- "flare": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><circle cx="70" cy="80" r="46" fill="#ff8a3d"/><circle cx="70" cy="80" r="36" fill="#ffc93c"/><path d="M108 55 Q175 15 190 78 Q170 120 112 95" fill="none" stroke="#ff6b6b" stroke-width="6"><animate attributeName="stroke-width" values="4;10;4" dur="1.6s" repeatCount="indefinite"/></path><circle cx="345" cy="85" r="32" fill="#8b85b1"/><path d="M295 45 Q275 85 295 125" fill="none" stroke="#7fe7ff" stroke-width="5" stroke-linecap="round"/></svg>',
- "particles": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><path d="M270 135 A60 60 0 0 1 390 135 Z" fill="#4e469c" stroke="#7fe7ff" stroke-width="3"/><line x1="30" y1="45" x2="140" y2="65" stroke="#ffc93c" stroke-width="4" stroke-linecap="round"><animate attributeName="x1" values="10;180" dur="1.2s" repeatCount="indefinite"/><animate attributeName="x2" values="90;260" dur="1.2s" repeatCount="indefinite"/></line><line x1="20" y1="95" x2="130" y2="110" stroke="#ff6b6b" stroke-width="4" stroke-linecap="round"><animate attributeName="x1" values="10;170" dur="1.5s" repeatCount="indefinite"/><animate attributeName="x2" values="90;250" dur="1.5s" repeatCount="indefinite"/></line></svg>',
- "garden": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><rect x="125" y="22" width="170" height="12" rx="6" fill="#ff66d9"/><polygon points="145,34 275,34 305,125 115,125" fill="#ff66d9" opacity=".16"/><rect x="120" y="118" width="180" height="22" rx="8" fill="#6b4c3b"/><path d="M165 118 Q165 82 145 78 M165 98 Q182 82 192 88" stroke="#4cd97b" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M245 118 Q245 75 225 72 M245 94 Q264 78 274 85" stroke="#4cd97b" stroke-width="5" fill="none" stroke-linecap="round"/></svg>',
- "harvest": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><rect x="115" y="112" width="190" height="24" rx="8" fill="#6b4c3b"/><path d="M160 112 V72 M210 112 V65 M260 112 V74" stroke="#4cd97b" stroke-width="5" stroke-linecap="round"/><circle cx="152" cy="82" r="10" fill="#ff6b6b"/><circle cx="218" cy="75" r="11" fill="#ff6b6b"/><circle cx="253" cy="84" r="10" fill="#ffc93c"/></svg>',
- "advice": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><circle cx="80" cy="80" r="34" fill="#2c6bed"/><path d="M62 65 Q80 55 95 72 Q85 95 65 88 Z" fill="#4cd97b"/><circle cx="345" cy="80" r="24" fill="#9c96bd"/><path d="M135 80 H295" stroke="#ffc93c" stroke-width="4" stroke-dasharray="10 10"><animate attributeName="stroke-dashoffset" from="40" to="0" dur="1.4s" repeatCount="indefinite"/></path></svg>',
- "blackout": '<svg viewBox="0 0 420 160"><rect width="420" height="160" fill="#131033"/><path d="M160 125 L195 75 L230 125 Z" fill="#7fe7ff"/><path d="M155 65 Q195 105 235 65" fill="none" stroke="#fff" stroke-width="5"/><polyline points="245,45 225,75 250,75 230,108" fill="none" stroke="#ffc93c" stroke-width="5" stroke-linecap="round"><animate attributeName="opacity" values="1;0.2;1" dur="0.9s" repeatCount="indefinite"/></polyline></svg>',
-}
+# =====================================================================
+# SMALL HELPERS
+# =====================================================================
+def pretty_date(day_info, day_number):
+    """'8 May 2024' from the real data (falls back to the old hardcoded date)."""
+    iso = day_info.get("date")
+    if iso:
+        d = date.fromisoformat(iso)
+        return f"{d.day} {d.strftime('%B')} {d.year}"
+    return f"{7 + day_number} May 2024"
 
 
 def visible(k, day):
@@ -118,39 +72,13 @@ def chips(fx, day, show_after=False):
     return "".join(parts)
 
 
-def header_and_audio_bar(g):
-    if "muted" not in st.session_state:
-        st.session_state.muted = False
-    dots = "".join(f'<i class="{"done" if i < g["day"] else "now" if i == g["day"] else ""}"></i>' for i in range(1, 6))
-    c_main, c_snd = st.columns([5, 1])
-    c_main.markdown(
-        f'<div class="lc-top"><div>🌙 Moon Day {min(g["day"], 5)} of 5</div><div class="lc-dots">{dots}</div><div class="lc-lvl">{g["level"].title()}</div></div>',
-        unsafe_allow_html=True,
-    )
-    snd_label = "🔇 Muted" if st.session_state.muted else "🔊 Sound"
-    if c_snd.button(snd_label, key="toggle_sound", use_container_width=True):
-        st.session_state.muted = not st.session_state.muted
-        st.rerun()
+def storm_was_hit(ui):
+    return any("Storm hit" in line for line in ui["storm_lines"])
 
 
-def hud(g, day):
-    keys = [k for k in ("power", "oxygen", "shield", "food") if visible(k, day)]
-    cols = st.columns(len(keys) + 1)
-    for col, k in zip(cols[:-1], keys):
-        val = g[k]
-        color = "#4cd97b" if val >= 60 else "#ffc93c" if val >= 30 else "#ff6b6b"
-        low = "⚠️ Low!" if val < 30 else " "
-        col.markdown(
-            f'<div class="lc-m"><div class="lc-mh"><span>{NAMES[k][0]} {NAMES[k][1]}</span><b>{val}</b></div>'
-            f'<div class="lc-bar"><i style="width:{val}%;background:{color}"></i></div><div class="lc-low">{low}</div></div>',
-            unsafe_allow_html=True,
-        )
-    cols[-1].markdown(
-        f'<div class="lc-sci">⭐ Science: {g["science"]}<br><span style="color:#CECBF6;font-size:.85rem">🔆 Panels: {g["panel"]}%</span></div>',
-        unsafe_allow_html=True,
-    )
-
-
+# =====================================================================
+# STATE TRANSITIONS (no drawing here)
+# =====================================================================
 def init_day_ui(g):
     start_day(g)
     g["_started"] = g["day"]
@@ -183,7 +111,7 @@ def choose_event_option(g, ev_id, opt_id, timed_out=False):
     rec["timed_out"] = timed_out
     ui["records"].append(rec)
     ui["last_rec"] = rec
-    has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in ("power", "oxygen", "shield", "food", "panel"))
+    has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in RESOURCES + ("panel",))
     cue = "warn" if (has_bad or rec["extra"] or timed_out) else "good"
     set_phase(ui, "result_consequence", cue, f"d{g['day']}_e{ui['ev_idx']}_res")
 
@@ -202,9 +130,54 @@ def toggle_action(ui, a):
 def finish_day_actions(g):
     ui = g["ui"]
     ui["storm_lines"] = resolve_end_of_day(g, list(ui["acts"]), ui["records"])
-    hit = any("Storm hit" in line for line in ui["storm_lines"])
-    cue = "win" if g["won"] else ("warn" if g["over"] else ("storm_hit" if hit else "storm_ok"))
+    cue = ("win" if g["won"] else "warn" if g["over"]
+           else "storm_hit" if storm_was_hit(ui) else "storm_ok")
     set_phase(ui, "storm_result", cue, f"d{ui['report_day']}_storm")
+
+
+def restart(level):
+    st.session_state.game = new_game(level=level)
+
+
+# =====================================================================
+# TOP BAR AND HUD
+# =====================================================================
+def header_and_audio_bar(g):
+    if "muted" not in st.session_state:
+        st.session_state.muted = False
+    dots = "".join(
+        f'<i class="{"done" if i < g["day"] else "now" if i == g["day"] else ""}"></i>'
+        for i in range(1, 6))
+    c_main, c_snd = st.columns([5, 1])
+    c_main.markdown(
+        f'<div class="lc-top"><div>🌙 Moon Day {min(g["day"], 5)} of 5</div>'
+        f'<div class="lc-dots">{dots}</div><div class="lc-lvl">{g["level"].title()}</div></div>',
+        unsafe_allow_html=True,
+    )
+    snd_label = "🔇 Muted" if st.session_state.muted else "🔊 Sound"
+    if c_snd.button(snd_label, key="toggle_sound", use_container_width=True):
+        st.session_state.muted = not st.session_state.muted
+        st.rerun()
+
+
+def hud(g, day):
+    keys = [k for k in RESOURCES if visible(k, day)]
+    cols = st.columns(len(keys) + 1)
+    for col, k in zip(cols[:-1], keys):
+        val = g[k]
+        color = "#4cd97b" if val >= 60 else "#ffc93c" if val >= 30 else "#ff6b6b"
+        low = "⚠️ Low!" if val < 30 else " "
+        col.markdown(
+            f'<div class="lc-m"><div class="lc-mh"><span>{NAMES[k][0]} {NAMES[k][1]}</span><b>{val}</b></div>'
+            f'<div class="lc-bar"><i style="width:{val}%;background:{color}"></i></div>'
+            f'<div class="lc-low">{low}</div></div>',
+            unsafe_allow_html=True,
+        )
+    cols[-1].markdown(
+        f'<div class="lc-sci">⭐ Science: {g["science"]}<br>'
+        f'<span style="color:#CECBF6;font-size:.85rem">🔆 Panels: {g["panel"]}%</span></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_timer_block(g, ev_id):
@@ -217,7 +190,8 @@ def render_timer_block(g, ev_id):
     pct = max(0, min(100, int((limit - elapsed) / limit * 100)))
     bar_color = "#4cd97b" if pct > 50 else "#ffc93c" if pct > 25 else "#ff6b6b"
     st.markdown(
-        f'<div class="lc-timer-wrap"><div class="lc-timer-top"><span>⏱️ Decision Timer</span><span>{rem}s left</span></div>'
+        f'<div class="lc-timer-wrap"><div class="lc-timer-top"><span>⏱️ Decision Timer</span>'
+        f'<span>{rem}s left</span></div>'
         f'<div class="lc-timer-bar"><i style="width:{pct}%;background:{bar_color}"></i></div></div>',
         unsafe_allow_html=True,
     )
@@ -228,18 +202,22 @@ def render_timer_block(g, ev_id):
         st.rerun()
 
 
-# --- STAGE 1A: MORNING SOLAR REPORT ---
+# =====================================================================
+# DAY SCREENS, IN THE ORDER THE PLAYER SEES THEM
+# =====================================================================
+# --- 1a. Morning solar report ---
 def render_briefing_sun(g, ui):
     day = g["day"]
     d = DAYS[day - 1]
     fact = DAY_FACTS[day]
     st.markdown(
         f'<div class="lc-stage"><span class="lc-badge">Morning Report • 1 of 2</span>'
-        f'<div class="lc-title">☀️ Real NASA Solar Report — {7 + day} May 2024</div>'
+        f'<div class="lc-title">☀️ Real NASA Solar Report — {pretty_date(d, day)}</div>'
         f'<div class="lc-sub">NASA satellites recorded <b>{d["flares"]} solar flares</b> on this date. '
         f'The strongest flare was class <b>{d["max_class"]}</b>.</div>'
         f'<div class="lc-sub" style="color:#7fe7ff;font-weight:700">{fact["unlock"]} — {ui["sun_msg"]}</div>'
-        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Good morning, Commander! Let\'s check today\'s space science tip before the events start.</div></div></div>',
+        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Good morning, Commander! '
+        f'Let\'s check today\'s space science tip before the events start.</div></div></div>',
         unsafe_allow_html=True,
     )
     if st.button("Next: Did You Know? 🔭 ➔", key="brief_next_1", type="primary", use_container_width=True):
@@ -247,7 +225,7 @@ def render_briefing_sun(g, ui):
         st.rerun()
 
 
-# --- STAGE 1B: MORNING DID YOU KNOW ---
+# --- 1b. Morning "did you know" ---
 def render_briefing_dyk(g, ui):
     day = g["day"]
     fact = DAY_FACTS[day]
@@ -255,7 +233,8 @@ def render_briefing_dyk(g, ui):
         f'<div class="lc-box-dyk"><span class="lc-badge">🔭 Did You Know? • 2 of 2</span>'
         f'<div class="lc-title" style="color:#ffc93c">{fact["unlock"]}</div>'
         f'<div class="lc-sub">{fact["fact"]}</div>'
-        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Ready for today\'s mission events? Stay sharp!</div></div></div>',
+        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Ready for today\'s mission events? '
+        f'Stay sharp!</div></div></div>',
         unsafe_allow_html=True,
     )
     if st.button(f"Start Day {day} Events 🚀", key="start_events", type="primary", use_container_width=True):
@@ -264,7 +243,7 @@ def render_briefing_dyk(g, ui):
         st.rerun()
 
 
-# --- STAGE 2: EVENT VISUAL + CHOICE CARDS ---
+# --- 2. Event picture + two choice cards ---
 def render_event_choice(g, ui):
     day = g["day"]
     idx = ui["ev_idx"]
@@ -294,7 +273,10 @@ def render_event_choice(g, ui):
         with col:
             now_chips = chips(opt.get("now", {}), day)
             after_chips = chips(opt.get("after", {}), day, show_after=True)
-            risk_badge = '<span class="lc-chip wait">🎲 50% Dust Scratch Risk</span>' if "risk" in opt else ""
+            risk_badge = ""
+            if "risk" in opt:       # chance comes from the engine, not hardcoded
+                pct = round(opt["risk"][0] * 100)
+                risk_badge = f'<span class="lc-chip wait">🎲 {pct}% Dust Scratch Risk</span>'
             st.markdown(
                 f'<div class="lc-choice-card"><b>{opt["label"]}</b>{now_chips}{after_chips}{risk_badge}</div>',
                 unsafe_allow_html=True,
@@ -309,14 +291,13 @@ def render_event_choice(g, ui):
             )
 
 
-# --- STAGE 3A: CONSEQUENCE + ITIRI REACTION (1 OF 3) ---
+# --- 3a. Consequence card (1 of 3) ---
 def render_result_consequence(g, ui):
     day = g["day"]
     rec = ui["last_rec"]
-    ev = EVENTS[rec["ev_id"]]
-    opt = ev["options"][rec["choice"]]
+    opt = EVENTS[rec["ev_id"]]["options"][rec["choice"]]
+    has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in RESOURCES + ("panel",))
 
-    has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in ("power", "oxygen", "shield", "food", "panel"))
     if rec.get("timed_out"):
         mood = "worry"
         reaction = "Time zipped by! I hit the safety switch so the crew stayed protected."
@@ -331,10 +312,12 @@ def render_result_consequence(g, ui):
         reaction = "Awesome decision, Commander! Look at how your base responded."
 
     delta_html = chips(rec["deltas"], day) or '<span class="lc-chip wait">⏳ Effect arrives after the storm!</span>'
-    extra_html = "".join(f"<p style='color:#ffb347;font-weight:700;margin:8px 0 0'>⚠️ {x}</p>" for x in rec["extra"])
+    extra_html = "".join(
+        f"<p style='color:#ffb347;font-weight:700;margin:8px 0 0'>⚠️ {x}</p>" for x in rec["extra"])
+    warn = "warn" if (rec["extra"] or has_bad) else ""
 
     st.markdown(
-        f'<div class="lc-box-res {"warn" if (rec["extra"] or has_bad) else ""}">'
+        f'<div class="lc-box-res {warn}">'
         f'<span class="lc-badge">Consequence</span><span class="lc-step-pills">Card 1 of 3</span>'
         f'<div class="lc-title">You chose: {opt["label"]}</div>'
         f'<div class="lc-sub">{rec["note"]}</div>'
@@ -342,32 +325,34 @@ def render_result_consequence(g, ui):
         f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{reaction}</div></div></div>',
         unsafe_allow_html=True,
     )
-
-    if st.button("Next: Why Did That Happen? 🧠 ➔", key=f"to_why_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+    if st.button("Next: Why Did That Happen? 🧠 ➔", key=f"to_why_{day}_{ui['ev_idx']}",
+                 type="primary", use_container_width=True):
         set_phase(ui, "result_why", "why", f"d{day}_e{ui['ev_idx']}_why")
         st.rerun()
 
 
-# --- STAGE 3B: WHY DID THAT HAPPEN? (2 OF 3) ---
+# --- 3b. Why did that happen? (2 of 3) ---
 def render_result_why(g, ui):
     day = g["day"]
     rec = ui["last_rec"]
     ev = EVENTS[rec["ev_id"]]
     st.markdown(
         f'<div class="lc-box-why">'
-        f'<span class="lc-badge" style="background:#7fe7ff">🧠 Why Did That Happen?</span><span class="lc-step-pills">Card 2 of 3</span>'
+        f'<span class="lc-badge" style="background:#7fe7ff">🧠 Why Did That Happen?</span>'
+        f'<span class="lc-step-pills">Card 2 of 3</span>'
         f'<div class="lc-title" style="color:#7fe7ff">{ev["title"]}</div>'
         f'<div class="lc-sub">{rec["explain"]}</div>'
-        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Real NASA engineers weigh trade-offs just like this on every mission!</div></div></div>',
+        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Real NASA engineers weigh '
+        f'trade-offs just like this on every mission!</div></div></div>',
         unsafe_allow_html=True,
     )
-
-    if st.button("Next: Did You Know? 🔭 ➔", key=f"to_dyk_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+    if st.button("Next: Did You Know? 🔭 ➔", key=f"to_dyk_{day}_{ui['ev_idx']}",
+                 type="primary", use_container_width=True):
         set_phase(ui, "result_dyk", "dyk", f"d{day}_e{ui['ev_idx']}_dyk")
         st.rerun()
 
 
-# --- STAGE 3C: DID YOU KNOW? (3 OF 3) ---
+# --- 3c. Did you know? (3 of 3) ---
 def render_result_dyk(g, ui):
     day = g["day"]
     rec = ui["last_rec"]
@@ -376,15 +361,17 @@ def render_result_dyk(g, ui):
         f'<span class="lc-badge">🔭 Did You Know?</span><span class="lc-step-pills">Card 3 of 3</span>'
         f'<div class="lc-title" style="color:#ffc93c">Real Moon & Space Science</div>'
         f'<div class="lc-sub">{rec["did_you_know"]}</div>'
-        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Space fact unlocked! Ready for the next step, Commander?</div></div></div>',
+        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Space fact unlocked! '
+        f'Ready for the next step, Commander?</div></div></div>',
         unsafe_allow_html=True,
     )
-
-    is_last = (ui["ev_idx"] + 1) >= len(g["today"])
-    btn_label = "Pick Today's 2 Base Actions 🛠️ ➔" if is_last else f"Next Event ({ui['ev_idx'] + 2} of {len(g['today'])}) ➔"
-    if st.button(btn_label, key=f"done_ev_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+    total = len(g["today"])
+    is_last = (ui["ev_idx"] + 1) >= total
+    label = ("Pick Today's 2 Base Actions 🛠️ ➔" if is_last
+             else f"Next Event ({ui['ev_idx'] + 2} of {total}) ➔")
+    if st.button(label, key=f"done_ev_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
         ui["ev_idx"] += 1
-        if ui["ev_idx"] < len(g["today"]):
+        if ui["ev_idx"] < total:
             ui["turn_start"] = time.time()
             set_phase(ui, "event_choice", "event", f"d{day}_e{ui['ev_idx']}_choice")
         else:
@@ -392,14 +379,15 @@ def render_result_dyk(g, ui):
         st.rerun()
 
 
-# --- STAGE 4: PICK 2 CREW ACTIONS ---
+# --- 4. Pick 2 crew actions ---
 def render_actions(g, ui):
     day = g["day"]
     acts = available(g)
     st.markdown(
         f'<div class="lc-stage"><span class="lc-badge">Base Operations</span>'
         f'<div class="lc-title">🛠️ Pick 2 Crew Actions ({len(ui["acts"])}/2 selected)</div>'
-        f'<div class="lc-sub">Spend your remaining energy to prepare the Moon base before the solar storm hits!</div></div>',
+        f'<div class="lc-sub">Spend your remaining energy to prepare the Moon base '
+        f'before the solar storm hits!</div></div>',
         unsafe_allow_html=True,
     )
     cols = st.columns(len(acts))
@@ -422,12 +410,10 @@ def render_actions(g, ui):
                 on_click=toggle_action,
                 args=(ui, a),
             )
-
-    ready = len(ui["acts"]) == 2
     st.button(
         "End Day & Face the Solar Storm ☀️🛡️",
         key=f"endday_{day}",
-        disabled=not ready,
+        disabled=len(ui["acts"]) != 2,
         type="primary",
         use_container_width=True,
         on_click=finish_day_actions,
@@ -435,55 +421,41 @@ def render_actions(g, ui):
     )
 
 
-# --- STAGE 5: SOLAR STORM IMPACT ---
-# --- ENDING SCREEN: special WIN / LOSE screens ---
-LEVEL_ORDER = ["junior", "commander", "expert"]
-STAR2_SCIENCE = 30          # 2nd star: at least this much science
-STAR3_SCIENCE = 40          # 3rd star: this much science ...
-STAR3_MIN_RESOURCE = 15     # ... AND power, air and food all at least this high at the end
+# --- 5. End-of-day storm report ---
+def render_storm_result(g, ui, go_home):
+    if g["over"]:                      # win or loss: show the special ending screen
+        render_ending(g, ui, go_home)
+        return
+    day = ui["report_day"]
+    if storm_was_hit(ui):
+        mood = "worry"
+        headline = "☀️ The Solar Storm Pierced the Shield!"
+        msg = "The real flare was stronger than your shield today, so extra power was lost protecting the crew."
+    else:
+        mood = "joy"
+        headline = "🛡️ Shield Held Strong!"
+        msg = "Your shield blocked the solar radiation and kept the Moon base safe!"
 
-RANKS = {
-    1: ("Moon Cadet", "You kept your crew alive through a real solar superstorm!"),
-    2: ("Lunar Commander", "A safe base AND great science. Mission Control is impressed!"),
-    3: ("Solar Storm Hero", "A near-perfect mission. Mission Control is cheering!"),
-}
-
-LOSS_TIPS = {
-    "oxygen": ("💨", "The air ran out",
-               "The oxygen machine uses power, but a crew cannot live without air. "
-               "Next time, pick “Make oxygen” before the air bar gets low."),
-    "power": ("⚡", "The power ran out",
-              "Everything on the base runs on power. Keep an eye on the power bar, "
-              "and remember that the shield and the oxygen machine both use it."),
-    "food": ("🌱", "The food ran out",
-             "From Day 3 your crew gets hungry every day. Pick “Tend the garden” "
-             "before the food bar gets low."),
-}
-
-ENDING_CSS = """<style>
-.lc-end{animation:cardPullUp .6s cubic-bezier(.22,1,.36,1) both;border-radius:26px;padding:26px 24px;margin-bottom:1rem;color:#fff;text-align:center}
-.lc-end.win{background:radial-gradient(circle at 50% 0%,#5b4bc4 0%,#3C3489 55%,#26215C 100%);border:3px solid #ffc93c;box-shadow:0 0 40px rgba(255,201,60,.35)}
-.lc-end.lose{background:#1d1849;border:3px solid #ff9a9a}
-.lc-end .lc-tip{text-align:left}
-.lc-patch{width:170px;display:block;margin:.4rem auto;animation:patchPop .9s cubic-bezier(.34,1.56,.64,1) both}
-@keyframes patchPop{0%{transform:scale(0) rotate(-30deg)}100%{transform:scale(1) rotate(0)}}
-.lc-rank{font-size:2.1rem;font-weight:900;color:#ffd966;margin:.2rem 0 .3rem}
-.lc-bigsci{font-size:1.5rem;font-weight:800;color:#ffd966;margin:.4rem 0}
-.lc-newbest{display:inline-block;background:#ffc93c;color:#1b1340;font-weight:800;border-radius:999px;padding:4px 16px;margin:.2rem 0 .6rem;animation:pulseGlow 2.5s infinite}
-.lc-journey{display:flex;gap:10px;justify-content:center;margin:.9rem 0}
-.lc-journey span{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#3C3489;border:2px solid #7fe7ff;color:#fff}
-.lc-journey span.ok{background:#1d6b3f;border-color:#4cd97b}
-.lc-journey span.bad{background:#7a2b3a;border-color:#ff9a9a}
-.lc-journey span.na{opacity:.35}
-.lc-chip.neu{background:#3C3489;color:#fff}
-.lc-cause{background:#2c1a3d;border:2px dashed #ffb347;border-radius:18px;padding:14px 18px;margin:.8rem 0;text-align:left;color:#fff}
-.lc-cause b{color:#ffd966;font-size:1.15rem}
-.lc-confetti{position:fixed;inset:0;pointer-events:none;z-index:9998;overflow:hidden}
-.lc-confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:2px;opacity:0;animation:confettiFall linear 1 both}
-@keyframes confettiFall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:1}}
-</style>"""
+    lines_html = "".join(
+        f"<p style='margin:6px 0;font-size:1.05rem'>• {line}</p>" for line in ui["storm_lines"])
+    warn = "warn" if mood == "worry" else ""
+    st.markdown(
+        f'<div class="lc-box-res {warn}">'
+        f'<span class="lc-badge">End of Moon Day {day}</span>'
+        f'<div class="lc-title">{headline}</div>'
+        f'<div class="lc-sub">{msg}</div>{lines_html}'
+        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{msg}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button(f"Continue to Moon Day {g['day']} 🚀", key=f"next_day_{day}",
+                 type="primary", use_container_width=True):
+        g["ui"] = None
+        st.rerun()
 
 
+# =====================================================================
+# ENDING SCREENS (win / lose)
+# =====================================================================
 def ending_summary(g, ui):
     """Works out how the game ended. Pure logic, no Streamlit."""
     last_day = ui["report_day"]
@@ -496,7 +468,7 @@ def ending_summary(g, ui):
         empty = [k for k in ("oxygen", "power", "food")
                  if g[k] <= 0 and (k != "food" or last_day >= 3)]
         s["cause"] = empty[0] if empty else "power"
-        s["storm_hit"] = any("Storm hit" in line for line in ui["storm_lines"])
+        s["storm_hit"] = storm_was_hit(ui)
     return s
 
 
@@ -545,126 +517,109 @@ def journey_html(last_day, won):
     return '<div class="lc-journey">' + "".join(cells) + '</div>'
 
 
-def restart(level):
-    st.session_state.game = new_game(level=level)
+def _render_win(g, e):
+    stars = e["stars"]
+    rank, rank_msg = RANKS[stars]
+    total_flares = sum(d["flares"] for d in DAYS)
+    top_class = max((d["max_class"] for d in DAYS), key=rank_key)
+    chips_html = "".join(f'<span class="lc-chip neu">{NAMES[k][0]} {NAMES[k][1]} {g[k]}</span>'
+                         for k in RESOURCES)
+    best_html = '<div class="lc-newbest">🏆 New personal best!</div>' if e.get("new_best") else ""
+    hint = ("" if stars == 3 else
+            f'<div class="lc-sub" style="color:#7fe7ff;font-weight:700">Want 3 stars? '
+            f'Collect {STAR3_SCIENCE}+ science and finish with power, air and food '
+            f'all above {STAR3_MIN_RESOURCE - 1}.</div>')
+    st.markdown(
+        confetti_html()
+        + '<div class="lc-end win"><span class="lc-badge">Mission Complete</span>'
+        + patch_svg(stars, e["level"])
+        + f'<div class="lc-rank">{rank}</div>'
+        + f'<div class="lc-sub">{rank_msg}</div>'
+        + f'<div class="lc-bigsci">⭐ {g["science"]} Science Points</div>{best_html}'
+        + journey_html(e["last_day"], True)
+        + f'<div>{chips_html}</div>'
+        + f'<div class="lc-sub" style="margin-top:.8rem">The real Sun fired <b>{total_flares} solar flares</b> '
+          f'during these 5 days in May 2024. The strongest was class <b>{top_class}</b>, '
+          f'and you kept the crew safe through all of them.</div>'
+        + hint
+        + f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Fantastic work, Commander! '
+          f'You are a real space hero!</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    nxt = LEVEL_ORDER[LEVEL_ORDER.index(e["level"]) + 1] if e["level"] != LEVEL_ORDER[-1] else None
+    if nxt:
+        cols = st.columns(2)
+        cols[0].button(f"Play {e['level'].title()} again 🔁", key="end_again", on_click=restart,
+                       args=(e["level"],), use_container_width=True)
+        cols[1].button(f"Try {nxt.title()} level 🚀", key="end_next", type="primary", on_click=restart,
+                       args=(nxt,), use_container_width=True)
+    else:
+        st.button(f"Play {e['level'].title()} again 🔁", key="end_again", type="primary",
+                  on_click=restart, args=(e["level"],), use_container_width=True)
+
+
+def _render_loss(g, e):
+    icon, title, tip = LOSS_TIPS[e["cause"]]
+    survived = e["last_day"] - 1
+    day_info = DAYS[e["last_day"] - 1]
+    extras = []
+    if e["cause"] == "power" and g["panel"] < 70:
+        extras.append("Moon dust scratched your solar panels, so they made less power.")
+    if e["storm_hit"]:
+        extras.append("The solar storm got through a weak shield today and cost you extra "
+                      + ("food." if e["cause"] == "food" else "power."))
+    extras_html = "".join(f"<div>• {x}</div>" for x in extras)
+    progress = (f"You kept the base running for {survived} of 5 days." if survived > 0
+                else "Day 1 is a tough one, and almost every astronaut has a hard first try.")
+    st.markdown(
+        '<div class="lc-end lose"><span class="lc-badge">Mission Debrief</span>'
+        + f'<div class="lc-title">Mission paused on Moon Day {e["last_day"]}</div>'
+        + f'<div class="lc-sub">{progress}</div>'
+        + journey_html(e["last_day"], False)
+        + f'<div class="lc-cause"><b>{icon} What happened: {title}</b>'
+          f'<div style="margin:.4rem 0">{tip}</div>{extras_html}</div>'
+        + f'<div class="lc-sub">On {pretty_date(day_info, e["last_day"])} the real Sun produced '
+          f'<b>{day_info["flares"]} solar flares</b>, the strongest was class <b>{day_info["max_class"]}</b>. '
+          f'Real NASA teams practice missions again and again until they get it right.</div>'
+        + f'<div class="lc-tip">{itiri("worry")}<div class="lc-say">Do not worry, Commander! '
+          f'Every astronaut learns from a tough mission. Let us try again!</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    st.button(f"Try {e['level'].title()} again 🔁", key="end_again", type="primary",
+              on_click=restart, args=(e["level"],), use_container_width=True)
 
 
 def render_ending(g, ui, go_home):
-    # work out the ending once (so "new personal best" does not flicker on reruns)
+    # work out the ending once, so "new personal best" does not flicker on reruns
     if "ending" not in ui:
         ui["ending"] = ending_summary(g, ui)
         if g["won"]:
-            if "best_science" not in st.session_state:
-                st.session_state.best_science = {}
-            best = st.session_state.best_science
+            best = st.session_state.setdefault("best_science", {})
             prev = best.get(g["level"], 0)
             ui["ending"]["new_best"] = prev > 0 and g["science"] > prev
             best[g["level"]] = max(prev, g["science"])
     e = ui["ending"]
     st.markdown(ENDING_CSS, unsafe_allow_html=True)
-
     if e["won"]:
-        stars = e["stars"]
-        rank, rank_msg = RANKS[stars]
-        total_flares = sum(d["flares"] for d in DAYS)
-        top_class = max((d["max_class"] for d in DAYS), key=rank_key)
-        chips_html = "".join(f'<span class="lc-chip neu">{NAMES[k][0]} {NAMES[k][1]} {g[k]}</span>'
-                             for k in ("power", "oxygen", "shield", "food"))
-        best_html = '<div class="lc-newbest">🏆 New personal best!</div>' if e.get("new_best") else ""
-        hint = ("" if stars == 3 else
-                f'<div class="lc-sub" style="color:#7fe7ff;font-weight:700">Want 3 stars? Collect {STAR3_SCIENCE}+ science '
-                f'and finish with power, air and food all above {STAR3_MIN_RESOURCE - 1}.</div>')
-        st.markdown(
-            confetti_html()
-            + '<div class="lc-end win"><span class="lc-badge">Mission Complete</span>'
-            + patch_svg(stars, e["level"])
-            + f'<div class="lc-rank">{rank}</div>'
-            + f'<div class="lc-sub">{rank_msg}</div>'
-            + f'<div class="lc-bigsci">⭐ {g["science"]} Science Points</div>{best_html}'
-            + journey_html(e["last_day"], True)
-            + f'<div>{chips_html}</div>'
-            + f'<div class="lc-sub" style="margin-top:.8rem">The real Sun fired <b>{total_flares} solar flares</b> during these 5 days '
-              f'in May 2024. The strongest was class <b>{top_class}</b>, and you kept the crew safe through all of them.</div>'
-            + hint
-            + f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Fantastic work, Commander! You are a real space hero!</div></div></div>',
-            unsafe_allow_html=True,
-        )
-        nxt = LEVEL_ORDER[LEVEL_ORDER.index(e["level"]) + 1] if e["level"] != LEVEL_ORDER[-1] else None
-        if nxt:
-            cols = st.columns(2)
-            cols[0].button(f"Play {e['level'].title()} again 🔁", key="end_again", on_click=restart,
-                           args=(e["level"],), use_container_width=True)
-            cols[1].button(f"Try {nxt.title()} level 🚀", key="end_next", type="primary", on_click=restart,
-                           args=(nxt,), use_container_width=True)
-        else:
-            st.button(f"Play {e['level'].title()} again 🔁", key="end_again", type="primary", on_click=restart,
-                      args=(e["level"],), use_container_width=True)
+        _render_win(g, e)
     else:
-        icon, title, tip = LOSS_TIPS[e["cause"]]
-        survived = e["last_day"] - 1
-        day = DAYS[e["last_day"] - 1]
-        extras = []
-        if e["cause"] == "power" and g["panel"] < 70:
-            extras.append("Moon dust scratched your solar panels, so they made less power.")
-        if e["storm_hit"]:
-            extras.append("The solar storm got through a weak shield today and cost you extra "
-                          + ("food." if e["cause"] == "food" else "power."))
-        extras_html = "".join(f"<div>• {x}</div>" for x in extras)
-        progress = (f"You kept the base running for {survived} of 5 days." if survived > 0
-                    else "Day 1 is a tough one, and almost every astronaut has a hard first try.")
-        st.markdown(
-            '<div class="lc-end lose"><span class="lc-badge">Mission Debrief</span>'
-            + f'<div class="lc-title">Mission paused on Moon Day {e["last_day"]}</div>'
-            + f'<div class="lc-sub">{progress}</div>'
-            + journey_html(e["last_day"], False)
-            + f'<div class="lc-cause"><b>{icon} What happened: {title}</b>'
-              f'<div style="margin:.4rem 0">{tip}</div>{extras_html}</div>'
-            + f'<div class="lc-sub">On {7 + e["last_day"]} May 2024 the real Sun produced <b>{day["flares"]} solar flares</b>, '
-              f'the strongest was class <b>{day["max_class"]}</b>. Real NASA teams practice missions again and again until they get it right.</div>'
-            + f'<div class="lc-tip">{itiri("worry")}<div class="lc-say">Do not worry, Commander! Every astronaut learns from a tough mission. Let us try again!</div></div></div>',
-            unsafe_allow_html=True,
-        )
-        st.button(f"Try {e['level'].title()} again 🔁", key="end_again", type="primary", on_click=restart,
-                  args=(e["level"],), use_container_width=True)
-    st.button("Back to Mission Control Home 🏠", key="go_home_btn", on_click=go_home, use_container_width=True)
-def render_storm_result(g, ui, go_home):
-    if g["over"]:
-        render_ending(g, ui, go_home)
-        return
-    day = ui["report_day"]
-    hit = any("Storm hit" in line for line in ui["storm_lines"])
-    bad = g["over"] and not g["won"]
-    mood = "worry" if (hit or bad) else "joy"
+        _render_loss(g, e)
+    st.button("Back to Mission Control Home 🏠", key="go_home_btn", on_click=go_home,
+              use_container_width=True)
 
-    if bad:
-        headline = "Mission Alert: Life Support Ran Low!"
-        msg = "Power, air, or food hit zero. Real NASA teams test missions many times—try again with what you learned!"
-    elif g["won"]:
-        headline = f"🎉 Mission Complete! {g['science']} Science Points!"
-        msg = "You guided your crew safely through all 5 days of the May 2024 solar superstorm!"
-    elif hit:
-        headline = "☀️ The Solar Storm Pierced the Shield!"
-        msg = "The real flare was stronger than your shield today, so extra power was lost protecting the crew."
-    else:
-        headline = "🛡️ Shield Held Strong!"
-        msg = "Your shield blocked the solar radiation and kept the Moon base safe!"
 
-    lines_html = "".join(f"<p style='margin:6px 0;font-size:1.05rem'>• {line}</p>" for line in ui["storm_lines"])
-    st.markdown(
-        f'<div class="lc-box-res {"warn" if (hit or bad) else ""}">'
-        f'<span class="lc-badge">End of Moon Day {day}</span>'
-        f'<div class="lc-title">{headline}</div>'
-        f'<div class="lc-sub">{msg}</div>{lines_html}'
-        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{msg}</div></div></div>',
-        unsafe_allow_html=True,
-    )
-
-    if g["over"]:
-        st.button("Back to Mission Control Home 🏠", key="go_home_btn", type="primary", use_container_width=True, on_click=go_home)
-    else:
-        if st.button(f"Continue to Moon Day {g['day']} 🚀", key=f"next_day_{day}", type="primary", use_container_width=True):
-            g["ui"] = None
-            st.rerun()
+# =====================================================================
+# ENTRY POINT (called from app.py)
+# =====================================================================
+PHASES = {
+    "briefing_sun": render_briefing_sun,
+    "briefing_dyk": render_briefing_dyk,
+    "event_choice": render_event_choice,
+    "result_consequence": render_result_consequence,
+    "result_why": render_result_why,
+    "result_dyk": render_result_dyk,
+    "actions": render_actions,
+}
 
 
 def render_day(g, go_home):
@@ -678,20 +633,7 @@ def render_day(g, go_home):
     hud(g, display_day)
     play_sound_engine(ui.get("cue", ""), st.session_state.get("muted", False), ui.get("cue_id", ""))
 
-    phase = ui["phase"]
-    if phase == "briefing_sun":
-        render_briefing_sun(g, ui)
-    elif phase == "briefing_dyk":
-        render_briefing_dyk(g, ui)
-    elif phase == "event_choice":
-        render_event_choice(g, ui)
-    elif phase == "result_consequence":
-        render_result_consequence(g, ui)
-    elif phase == "result_why":
-        render_result_why(g, ui)
-    elif phase == "result_dyk":
-        render_result_dyk(g, ui)
-    elif phase == "actions":
-        render_actions(g, ui)
-    elif phase == "storm_result":
+    if ui["phase"] == "storm_result":
         render_storm_result(g, ui, go_home)
+    else:
+        PHASES[ui["phase"]](g, ui)
