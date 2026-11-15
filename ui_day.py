@@ -4,14 +4,24 @@ from engine import (
     ACTIONS, DIFFICULTY, EVENTS, UNLOCK, DAYS, DAY_FACTS,
     available, start_day, resolve_morning, resolve_event, resolve_end_of_day,
 )
+from sound_fx import play_sound_engine
 
 NAMES = {"power": ("⚡", "Power"), "oxygen": ("💨", "Air"), "shield": ("🛡️", "Shield"),
          "food": ("🌱", "Food"), "science": ("⭐", "Science"), "panel": ("🔆", "Panels")}
 FACTOR = {"power": "power", "oxygen": "life", "shield": "shield", "food": "food"}
 
 CSS = """<style>
+/* Hide the invisible audio component iframe inside .st-key-page */
+.st-key-page iframe {
+  height: 0 !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
+  position: absolute !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
 @keyframes cardPullUp {
-  0% { opacity: 0; transform: translateY(26px) scale(0.97); }
+  0% { opacity: 0; transform: translateY(28px) scale(0.97); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes floatSlow {
@@ -22,37 +32,36 @@ CSS = """<style>
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 201, 60, 0.35); }
   50% { box-shadow: 0 0 22px 4px rgba(255, 201, 60, 0.55); }
 }
-.lc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;font-weight:700;font-size:1.25rem;margin-bottom:.7rem}
+.lc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#fff;font-weight:700;font-size:1.2rem;margin-bottom:.6rem}
 .lc-dots{display:flex;gap:8px}.lc-dots i{width:16px;height:16px;border-radius:50%;background:#3C3489;border:2px solid #7fe7ff;display:inline-block}
 .lc-dots i.done{background:#7fe7ff}.lc-dots i.now{background:#ffc93c;border-color:#ffc93c;transform:scale(1.25)}
 .lc-lvl{background:#7fe7ff;color:#26215C;border-radius:999px;padding:4px 16px;font-size:.95rem}
-.lc-hud{background:#1d1849;border:1px solid #534ab7;border-radius:18px;padding:12px 16px;margin-bottom:1rem}
 .lc-m{margin-bottom:.35rem}.lc-mh{display:flex;justify-content:space-between;color:#fff;font-weight:700;font-size:1rem}
 .lc-bar{height:14px;background:#3C3489;border-radius:999px;overflow:hidden}.lc-bar i{display:block;height:100%;border-radius:999px;transition:width .5s}
 .lc-low{color:#ffb347;font-size:.8rem;font-weight:700;min-height:1rem}
 .lc-sci{color:#ffd966;font-weight:800;font-size:1.05rem;text-align:right}
-.lc-stage{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#3C3489;border:2px solid #7F77DD;border-radius:22px;padding:20px 22px;margin-bottom:1rem;color:#fff}
-.lc-badge{display:inline-block;background:#ffc93c;color:#1b1340;font-weight:800;font-size:.85rem;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem}
-.lc-title{font-size:1.65rem;font-weight:800;color:#fff;margin:.2rem 0 .4rem}
-.lc-sub{font-size:1.1rem;color:#EEEDFE;line-height:1.45;margin-bottom:.8rem}
+.lc-stage{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#3C3489;border:2px solid #7F77DD;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
+.lc-badge{display:inline-block;background:#ffc93c;color:#1b1340;font-weight:800;font-size:.85rem;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:.6rem}
+.lc-step-pills{float:right;font-size:.85rem;color:#CECBF6;font-weight:700}
+.lc-title{font-size:1.65rem;font-weight:800;color:#fff;margin:.2rem 0 .5rem}
+.lc-sub{font-size:1.15rem;color:#EEEDFE;line-height:1.5;margin-bottom:.9rem}
 .lc-art{background:#191442;border:1px solid #534ab7;border-radius:18px;padding:10px;text-align:center;margin-bottom:.8rem}
-.lc-art svg{width:100%;max-height:190px;display:block;margin:0 auto}
+.lc-art svg{width:100%;max-height:185px;display:block;margin:0 auto}
 .lc-choice-card{animation:cardPullUp .5s cubic-bezier(.22,1,.36,1) both;background:#26215C;border:2px solid #7fe7ff;border-radius:18px;padding:14px 16px;margin-bottom:.5rem;min-height:108px}
 .lc-choice-card b{color:#fff;font-size:1.12rem;display:block;margin-bottom:6px}
-.lc-chip{display:inline-block;border-radius:999px;padding:3px 10px;margin:2px 4px 2px 0;font-size:.85rem;font-weight:700}
+.lc-chip{display:inline-block;border-radius:999px;padding:4px 12px;margin:3px 5px 3px 0;font-size:.9rem;font-weight:700}
 .lc-chip.up{background:#1d6b3f;color:#d6ffe6}.lc-chip.dn{background:#7a2b3a;color:#ffe0e0}.lc-chip.wait{background:#5a4d19;color:#ffe999}
 .lc-timer-wrap{background:#191442;border:1px solid #534ab7;border-radius:14px;padding:8px 14px;margin-bottom:.9rem}
 .lc-timer-top{display:flex;justify-content:space-between;color:#EEEDFE;font-weight:700;font-size:.95rem;margin-bottom:5px}
 .lc-timer-bar{height:10px;background:#3C3489;border-radius:999px;overflow:hidden}
 .lc-timer-bar i{display:block;height:100%;border-radius:999px;transition:width .35s linear}
-.lc-box-res{animation:cardPullUp .4s ease-out both;background:#1d1849;border:2px solid #4cd97b;border-radius:18px;padding:16px 18px;margin-bottom:.8rem;color:#fff}
+.lc-box-res{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#1d1849;border:2px solid #4cd97b;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
 .lc-box-res.warn{border-color:#ff9a9a}
-.lc-box-why{animation:cardPullUp .55s ease-out both;background:#26215C;border-left:6px solid #7fe7ff;border-radius:16px;padding:14px 18px;margin-bottom:.8rem;color:#EEEDFE}
-.lc-box-dyk{animation:cardPullUp .7s ease-out both;background:#382b6e;border:2px dashed #ffc93c;border-radius:16px;padding:14px 18px;margin-bottom:1rem;color:#fff}
-.lc-box-why b,.lc-box-dyk b{display:block;font-size:1.05rem;margin-bottom:4px}
-.lc-box-why b{color:#7fe7ff}.lc-box-dyk b{color:#ffc93c}
-.lc-tip{display:flex;align-items:center;gap:14px;margin:.6rem 0}.lc-tip svg{width:76px;flex:none;overflow:visible;animation:floatSlow 3s ease-in-out infinite}
-.lc-say{background:#fff;color:#26215C;border-radius:18px;padding:11px 15px;font-weight:600;font-size:1rem;line-height:1.35}
+.lc-box-why{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#221c57;border:2px solid #7fe7ff;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#EEEDFE}
+.lc-box-dyk{animation:cardPullUp .45s cubic-bezier(.22,1,.36,1) both;background:#342669;border:2px dashed #ffc93c;border-radius:22px;padding:22px 24px;margin-bottom:1rem;color:#fff}
+.lc-tip{display:flex;align-items:center;gap:16px;margin-top:1rem;background:rgba(255,255,255,0.06);border-radius:18px;padding:12px 16px}
+.lc-tip svg{width:82px;flex:none;overflow:visible;animation:floatSlow 3s ease-in-out infinite}
+.lc-say{background:#fff;color:#26215C;border-radius:18px;padding:12px 16px;font-weight:700;font-size:1.05rem;line-height:1.4}
 button[data-testid="stBaseButton-primary"]{background:#FFC93C!important;color:#1b1340!important;box-shadow:0 4px 0 #d9961b;animation:pulseGlow 2.5s infinite}
 div.stButton>button{min-height:3.1rem;font-size:1.05rem}
 </style>"""
@@ -101,9 +110,19 @@ def chips(fx, day, show_after=False):
     return "".join(parts)
 
 
-def header(g):
+def header_and_audio_bar(g):
+    if "muted" not in st.session_state:
+        st.session_state.muted = False
     dots = "".join(f'<i class="{"done" if i < g["day"] else "now" if i == g["day"] else ""}"></i>' for i in range(1, 6))
-    return f'<div class="lc-top"><div>🌙 Moon Day {min(g["day"], 5)} of 5</div><div class="lc-dots">{dots}</div><div class="lc-lvl">{g["level"].title()}</div></div>'
+    c_main, c_snd = st.columns([5, 1])
+    c_main.markdown(
+        f'<div class="lc-top"><div>🌙 Moon Day {min(g["day"], 5)} of 5</div><div class="lc-dots">{dots}</div><div class="lc-lvl">{g["level"].title()}</div></div>',
+        unsafe_allow_html=True,
+    )
+    snd_label = "🔇 Muted" if st.session_state.muted else "🔊 Sound"
+    if c_snd.button(snd_label, key="toggle_sound", use_container_width=True):
+        st.session_state.muted = not st.session_state.muted
+        st.rerun()
 
 
 def hud(g, day):
@@ -129,7 +148,7 @@ def init_day_ui(g):
     g["_started"] = g["day"]
     sun, sun_msg = resolve_morning(g)
     g["ui"] = {
-        "phase": "briefing",
+        "phase": "briefing_sun",
         "ev_idx": 0,
         "turn_start": time.time(),
         "records": [],
@@ -139,7 +158,15 @@ def init_day_ui(g):
         "sun_msg": sun_msg,
         "storm_lines": [],
         "report_day": g["day"],
+        "cue": "briefing",
+        "cue_id": f"d{g['day']}_brief1",
     }
+
+
+def set_phase(ui, phase, cue, cue_tag):
+    ui["phase"] = phase
+    ui["cue"] = cue
+    ui["cue_id"] = cue_tag
 
 
 def choose_event_option(g, ev_id, opt_id, timed_out=False):
@@ -148,17 +175,9 @@ def choose_event_option(g, ev_id, opt_id, timed_out=False):
     rec["timed_out"] = timed_out
     ui["records"].append(rec)
     ui["last_rec"] = rec
-    ui["phase"] = "event_result"
-
-
-def next_from_event_result(g):
-    ui = g["ui"]
-    ui["ev_idx"] += 1
-    if ui["ev_idx"] < len(g["today"]):
-        ui["phase"] = "event_choice"
-        ui["turn_start"] = time.time()
-    else:
-        ui["phase"] = "actions"
+    has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in ("power", "oxygen", "shield", "food", "panel"))
+    cue = "warn" if (has_bad or rec["extra"] or timed_out) else "good"
+    set_phase(ui, "result_consequence", cue, f"d{g['day']}_e{ui['ev_idx']}_res")
 
 
 def toggle_action(ui, a):
@@ -166,6 +185,8 @@ def toggle_action(ui, a):
         ui["acts"].remove(a)
     elif len(ui["acts"]) < 2:
         ui["acts"].append(a)
+        ui["cue"] = "action"
+        ui["cue_id"] = f"act_{a}_{time.time()}"
     else:
         st.toast("Pick 2 actions! Tap a selected one to swap it.", icon="👆")
 
@@ -173,7 +194,9 @@ def toggle_action(ui, a):
 def finish_day_actions(g):
     ui = g["ui"]
     ui["storm_lines"] = resolve_end_of_day(g, list(ui["acts"]), ui["records"])
-    ui["phase"] = "storm_result"
+    hit = any("Storm hit" in line for line in ui["storm_lines"])
+    cue = "win" if g["won"] else ("storm_hit" if hit else "storm_ok")
+    set_phase(ui, "storm_result", cue, f"d{ui['report_day']}_storm")
 
 
 def render_timer_block(g, ev_id):
@@ -197,25 +220,43 @@ def render_timer_block(g, ev_id):
         st.rerun()
 
 
-def render_briefing(g, ui):
+# --- STAGE 1A: MORNING SOLAR REPORT ---
+def render_briefing_sun(g, ui):
     day = g["day"]
     d = DAYS[day - 1]
     fact = DAY_FACTS[day]
     st.markdown(
-        f'<div class="lc-stage"><span class="lc-badge">Morning Mission Briefing</span>'
+        f'<div class="lc-stage"><span class="lc-badge">Morning Report • 1 of 2</span>'
         f'<div class="lc-title">☀️ Real NASA Solar Report — {7 + day} May 2024</div>'
-        f'<div class="lc-sub">NASA satellites detected <b>{d["flares"]} solar flares</b> on this date. '
+        f'<div class="lc-sub">NASA satellites recorded <b>{d["flares"]} solar flares</b> on this date. '
         f'The strongest flare was class <b>{d["max_class"]}</b>.</div>'
-        f'<div class="lc-box-why"><b>{fact["unlock"]}</b>{ui["sun_msg"]}</div>'
-        f'<div class="lc-box-dyk"><b>🔭 Did You Know?</b>{fact["fact"]}</div></div>',
+        f'<div class="lc-sub" style="color:#7fe7ff;font-weight:700">{fact["unlock"]} — {ui["sun_msg"]}</div>'
+        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Good morning, Commander! Let\'s check today\'s space science tip before the events start.</div></div></div>',
         unsafe_allow_html=True,
     )
-    if st.button(f"Start Day {day} Events 🚀", key="start_events", type="primary", use_container_width=True):
-        ui["phase"] = "event_choice"
-        ui["turn_start"] = time.time()
+    if st.button("Next: Did You Know? 🔭 ➔", key="brief_next_1", type="primary", use_container_width=True):
+        set_phase(ui, "briefing_dyk", "dyk", f"d{day}_brief2")
         st.rerun()
 
 
+# --- STAGE 1B: MORNING DID YOU KNOW ---
+def render_briefing_dyk(g, ui):
+    day = g["day"]
+    fact = DAY_FACTS[day]
+    st.markdown(
+        f'<div class="lc-box-dyk"><span class="lc-badge">🔭 Did You Know? • 2 of 2</span>'
+        f'<div class="lc-title" style="color:#ffc93c">{fact["unlock"]}</div>'
+        f'<div class="lc-sub">{fact["fact"]}</div>'
+        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Ready for today\'s mission events? Stay sharp!</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button(f"Start Day {day} Events 🚀", key="start_events", type="primary", use_container_width=True):
+        ui["turn_start"] = time.time()
+        set_phase(ui, "event_choice", "event", f"d{day}_e0_choice")
+        st.rerun()
+
+
+# --- STAGE 2: EVENT VISUAL + CHOICE CARDS ---
 def render_event_choice(g, ui):
     day = g["day"]
     idx = ui["ev_idx"]
@@ -260,36 +301,90 @@ def render_event_choice(g, ui):
             )
 
 
-def render_event_result(g, ui):
+# --- STAGE 3A: CONSEQUENCE + ITIRI REACTION (1 OF 3) ---
+def render_result_consequence(g, ui):
     day = g["day"]
     rec = ui["last_rec"]
     ev = EVENTS[rec["ev_id"]]
     opt = ev["options"][rec["choice"]]
+
     has_bad = any(v < 0 for k, v in rec["deltas"].items() if k in ("power", "oxygen", "shield", "food", "panel"))
-    mood = "worry" if (has_bad or rec["extra"]) else "joy"
+    if rec.get("timed_out"):
+        mood = "worry"
+        reaction = "Time zipped by! I hit the safety switch so the crew stayed protected."
+    elif rec["extra"]:
+        mood = "worry"
+        reaction = "Whoa! That sharp Moon dust scratched the solar panels! Let's see what changed."
+    elif has_bad:
+        mood = "worry"
+        reaction = "Ooh, a classic space trade-off! Protecting one system meant spending another."
+    else:
+        mood = "joy"
+        reaction = "Awesome decision, Commander! Look at how your base responded."
 
     delta_html = chips(rec["deltas"], day) or '<span class="lc-chip wait">⏳ Effect arrives after the storm!</span>'
-    extra_html = "".join(f"<p style='color:#ffb347;font-weight:700;margin:6px 0 0'>⚠️ {x}</p>" for x in rec["extra"])
-    timeout_note = "<p style='color:#ffc93c;font-weight:700;margin:0 0 6px'>⏱️ Time ran out! Itiri quickly picked the safest option for you.</p>" if rec.get("timed_out") else ""
+    extra_html = "".join(f"<p style='color:#ffb347;font-weight:700;margin:8px 0 0'>⚠️ {x}</p>" for x in rec["extra"])
 
     st.markdown(
-        f'<div class="lc-box-res {"warn" if rec["extra"] else ""}">'
-        f'<span class="lc-badge">Consequence</span>{timeout_note}'
-        f'<div class="lc-title" style="font-size:1.35rem">You chose: {opt["label"]}</div>'
+        f'<div class="lc-box-res {"warn" if (rec["extra"] or has_bad) else ""}">'
+        f'<span class="lc-badge">Consequence</span><span class="lc-step-pills">Card 1 of 3</span>'
+        f'<div class="lc-title">You chose: {opt["label"]}</div>'
         f'<div class="lc-sub">{rec["note"]}</div>'
-        f'<div>{delta_html}</div>{extra_html}</div>'
-        f'<div class="lc-box-why"><b>🧠 Why Did That Happen?</b>{rec["explain"]}</div>'
-        f'<div class="lc-box-dyk"><b>🔭 Did You Know?</b>{rec["did_you_know"]}</div>'
-        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">Great job thinking like a NASA flight controller, Commander!</div></div>',
+        f'<div>{delta_html}</div>{extra_html}'
+        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{reaction}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Next: Why Did That Happen? 🧠 ➔", key=f"to_why_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+        set_phase(ui, "result_why", "why", f"d{day}_e{ui['ev_idx']}_why")
+        st.rerun()
+
+
+# --- STAGE 3B: WHY DID THAT HAPPEN? (2 OF 3) ---
+def render_result_why(g, ui):
+    day = g["day"]
+    rec = ui["last_rec"]
+    ev = EVENTS[rec["ev_id"]]
+    st.markdown(
+        f'<div class="lc-box-why">'
+        f'<span class="lc-badge" style="background:#7fe7ff">🧠 Why Did That Happen?</span><span class="lc-step-pills">Card 2 of 3</span>'
+        f'<div class="lc-title" style="color:#7fe7ff">{ev["title"]}</div>'
+        f'<div class="lc-sub">{rec["explain"]}</div>'
+        f'<div class="lc-tip">{itiri("happy")}<div class="lc-say">Real NASA engineers weigh trade-offs just like this on every mission!</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Next: Did You Know? 🔭 ➔", key=f"to_dyk_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+        set_phase(ui, "result_dyk", "dyk", f"d{day}_e{ui['ev_idx']}_dyk")
+        st.rerun()
+
+
+# --- STAGE 3C: DID YOU KNOW? (3 OF 3) ---
+def render_result_dyk(g, ui):
+    day = g["day"]
+    rec = ui["last_rec"]
+    st.markdown(
+        f'<div class="lc-box-dyk">'
+        f'<span class="lc-badge">🔭 Did You Know?</span><span class="lc-step-pills">Card 3 of 3</span>'
+        f'<div class="lc-title" style="color:#ffc93c">Real Moon & Space Science</div>'
+        f'<div class="lc-sub">{rec["did_you_know"]}</div>'
+        f'<div class="lc-tip">{itiri("joy")}<div class="lc-say">Space fact unlocked! Ready for the next step, Commander?</div></div></div>',
         unsafe_allow_html=True,
     )
 
     is_last = (ui["ev_idx"] + 1) >= len(g["today"])
-    btn_label = "Pick Today's 2 Base Actions ➔" if is_last else f"Next Event ({ui['ev_idx'] + 2} of {len(g['today'])}) ➔"
-    st.button(btn_label, key=f"cont_{day}_{ui['ev_idx']}", type="primary", use_container_width=True,
-              on_click=next_from_event_result, args=(g,))
+    btn_label = "Pick Today's 2 Base Actions 🛠️ ➔" if is_last else f"Next Event ({ui['ev_idx'] + 2} of {len(g['today'])}) ➔"
+    if st.button(btn_label, key=f"done_ev_{day}_{ui['ev_idx']}", type="primary", use_container_width=True):
+        ui["ev_idx"] += 1
+        if ui["ev_idx"] < len(g["today"]):
+            ui["turn_start"] = time.time()
+            set_phase(ui, "event_choice", "event", f"d{day}_e{ui['ev_idx']}_choice")
+        else:
+            set_phase(ui, "actions", "briefing", f"d{day}_actions")
+        st.rerun()
 
 
+# --- STAGE 4: PICK 2 CREW ACTIONS ---
 def render_actions(g, ui):
     day = g["day"]
     acts = available(g)
@@ -320,11 +415,6 @@ def render_actions(g, ui):
                 args=(ui, a),
             )
 
-    st.markdown(
-        '<div class="lc-box-dyk"><b>🔭 Did You Know?</b>On a real Moon base, every system is connected: '
-        'solar panels power the water-splitter that makes oxygen, and astronauts recycle almost every drop of water!</div>',
-        unsafe_allow_html=True,
-    )
     ready = len(ui["acts"]) == 2
     st.button(
         "End Day & Face the Solar Storm ☀️🛡️",
@@ -337,6 +427,7 @@ def render_actions(g, ui):
     )
 
 
+# --- STAGE 5: SOLAR STORM IMPACT ---
 def render_storm_result(g, ui, go_home):
     day = ui["report_day"]
     hit = any("Storm hit" in line for line in ui["storm_lines"])
@@ -361,8 +452,8 @@ def render_storm_result(g, ui, go_home):
         f'<div class="lc-box-res {"warn" if (hit or bad) else ""}">'
         f'<span class="lc-badge">End of Moon Day {day}</span>'
         f'<div class="lc-title">{headline}</div>'
-        f'<div class="lc-sub">{msg}</div>{lines_html}</div>'
-        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{msg}</div></div>',
+        f'<div class="lc-sub">{msg}</div>{lines_html}'
+        f'<div class="lc-tip">{itiri(mood)}<div class="lc-say">{msg}</div></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -376,20 +467,28 @@ def render_storm_result(g, ui, go_home):
 
 def render_day(g, go_home):
     st.markdown(CSS, unsafe_allow_html=True)
-    if g.get("ui") is None or g.get("_started") != g["day"] and g["ui"].get("phase") != "storm_result":
+    if g.get("ui") is None or (g.get("_started") != g["day"] and g["ui"].get("phase") != "storm_result"):
         init_day_ui(g)
     ui = g["ui"]
     display_day = ui["report_day"] if ui["phase"] == "storm_result" else g["day"]
-    st.markdown(header({**g, "day": display_day}), unsafe_allow_html=True)
+
+    header_and_audio_bar(g)
     hud(g, display_day)
+    play_sound_engine(ui.get("cue", ""), st.session_state.get("muted", False), ui.get("cue_id", ""))
 
     phase = ui["phase"]
-    if phase == "briefing":
-        render_briefing(g, ui)
+    if phase == "briefing_sun":
+        render_briefing_sun(g, ui)
+    elif phase == "briefing_dyk":
+        render_briefing_dyk(g, ui)
     elif phase == "event_choice":
         render_event_choice(g, ui)
-    elif phase == "event_result":
-        render_event_result(g, ui)
+    elif phase == "result_consequence":
+        render_result_consequence(g, ui)
+    elif phase == "result_why":
+        render_result_why(g, ui)
+    elif phase == "result_dyk":
+        render_result_dyk(g, ui)
     elif phase == "actions":
         render_actions(g, ui)
     elif phase == "storm_result":

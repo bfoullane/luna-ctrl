@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from pathlib import Path
 
 def rank(c):
     return ("ABCMX".index(c[0]), float(c[1:]))
@@ -12,7 +13,7 @@ def storm_strength(c):
         return round(15 + num)
     return 5
 
-def load_days(path="data/donki_archive.json"):
+def load_days(path=Path(__file__).parent / "data" / "donki_archive.json"):
     data = json.load(open(path))
     days = defaultdict(lambda: {"flares": 0, "x_flares": 0, "max_class": "B0"})
     for f in data["FLR"]:
