@@ -13,9 +13,9 @@ ACTIONS = {
 DRAIN = {"power": -5, "oxygen": -6, "shield": -3}
 
 DIFFICULTY = {
-    "junior":    {"events": 2, "storm": 0.8, "drain": 0.8, "timer": None},
-    "commander": {"events": 3, "storm": 1.0, "drain": 1.0, "timer": 10},
-    "expert":    {"events": 4, "storm": 1.3, "drain": 1.2, "timer": 8},
+    "junior":    {"events": 2, "storm": 0.8, "drain": 0.8, "sun": 18, "timer": None},
+    "commander": {"events": 3, "storm": 1.0, "drain": 1.0, "sun": 0, "timer": 10},
+    "expert":    {"events": 4, "storm": 1.3, "drain": 1.2, "sun": 0, "timer": 8},
 }
 
 MAIN = {1: "dust", 2: "flare", 3: "garden", 4: "advice", 5: "air"}
@@ -125,6 +125,11 @@ def fx(state, effects):
 def play_day(state, actions, choices):
     cfg = DIFFICULTY[state["level"]]
     rep, afters, day = [], [], state["day"]
+    sun = round(cfg["sun"] * state["panel"] / 100)                    # morning sunshine on the panels
+    fx(state, {"power": sun})
+    if sun:
+        rep.append(f"Sunshine: your panels made {sun} power this morning."
+                   + (" Damaged panels make less." if state["panel"] < 100 else ""))
     for a in actions:
         e = dict(ACTIONS[a]["fx"])
         if a == "solar":
