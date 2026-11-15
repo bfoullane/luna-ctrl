@@ -6,8 +6,8 @@ Built for the NASA Space Apps Challenge 2026: *Build a Junior Astronaut Mission 
 
 | | |
 |---|---|
-| 🎮 **Play online** |  |
-| 📑 **Demo slides** |  |
+| 🎮 **Play online** | https://luna-ctrl.streamlit.app/ |
+| 📑 **Demo slides** | https://docs.google.com/presentation/d/1sR0cZN2Q_iUv8SAP-x-1CTH_XUf0w1Cm/edit?usp=sharing&ouid=114002255917031635823&rtpof=true&sd=true |
 
 ## The idea
 
